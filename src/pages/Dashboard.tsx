@@ -1,11 +1,10 @@
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Navbar from '@/components/Navbar';
 import LinkForm from '@/components/LinkForm';
 import LinksTable from '@/components/LinksTable';
 import SearchBar from '@/components/SearchBar';
 import PaginationControls from '@/components/PaginationControls';
-import { getLinks, LinkData } from '@/services/mockData';
 import { 
   Card, 
   CardContent, 
@@ -22,28 +21,25 @@ import {
   ResponsiveContainer,
   Cell
 } from 'recharts';
+import { useQuery } from '@tanstack/react-query';
+import { linkApi } from '@/services/api';
 
 const Dashboard = () => {
-  const [links, setLinks] = useState<LinkData[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-  
   const limit = 5; // Links per page
   
-  useEffect(() => {
-    const fetchLinks = () => {
-      setLoading(true);
-      const { links: fetchedLinks, total } = getLinks(searchQuery, currentPage, limit);
-      setLinks(fetchedLinks);
-      setTotalPages(Math.ceil(total / limit));
-      setLoading(false);
-    };
-    
-    fetchLinks();
-  }, [searchQuery, currentPage, refreshTrigger]);
+  const { 
+    data: linksData,
+    isLoading,
+    refetch 
+  } = useQuery({
+    queryKey: ['links', searchQuery, currentPage, limit],
+    queryFn: () => linkApi.getUserLinks(currentPage, limit, searchQuery).then(res => res.data),
+  });
+  
+  const links = linksData?.links || [];
+  const totalPages = linksData?.pagination?.pages || 1;
   
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -56,19 +52,19 @@ const Dashboard = () => {
 
   const handleLinkCreated = () => {
     // Refresh the links list
-    setRefreshTrigger(prev => prev + 1);
+    refetch();
   };
   
   // Calculate total clicks across all links
-  const totalClicks = links.reduce((sum, link) => sum + link.clickCount, 0);
+  const totalClicks = links?.reduce((sum, link) => sum + link.clicks, 0) || 0;
   
   // Get top performing links for the chart
-  const topLinks = [...links]
-    .sort((a, b) => b.clickCount - a.clickCount)
+  const topLinks = [...(links || [])]
+    .sort((a, b) => b.clicks - a.clicks)
     .slice(0, 5)
     .map(link => ({
-      name: link.alias,
-      clicks: link.clickCount,
+      name: link.shortUrl,
+      clicks: link.clicks,
     }));
 
   return (
@@ -87,7 +83,7 @@ const Dashboard = () => {
                 <CardTitle className="text-sm font-medium text-muted-foreground">Total Links</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-3xl font-bold">{links.length}</p>
+                <p className="text-3xl font-bold">{linksData?.pagination?.total || 0}</p>
               </CardContent>
             </Card>
             
@@ -105,7 +101,9 @@ const Dashboard = () => {
                 <CardTitle className="text-sm font-medium text-muted-foreground">Active Links</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-3xl font-bold">{links.filter(link => link.isActive).length}</p>
+                <p className="text-3xl font-bold">
+                  {(links?.filter(link => !link.isExpired)?.length || 0)}
+                </p>
               </CardContent>
             </Card>
             
@@ -115,7 +113,7 @@ const Dashboard = () => {
               </CardHeader>
               <CardContent>
                 <p className="text-3xl font-bold">
-                  {links.length ? Math.round(totalClicks / links.length).toLocaleString() : '0'}
+                  {links?.length ? Math.round(totalClicks / links.length).toLocaleString() : '0'}
                 </p>
               </CardContent>
             </Card>
@@ -165,7 +163,7 @@ const Dashboard = () => {
               <SearchBar onSearch={handleSearch} initialValue={searchQuery} />
             </div>
             
-            <LinksTable links={links} loading={loading} />
+            <LinksTable links={links} loading={isLoading} />
             
             <div className="mt-4 flex justify-center">
               <PaginationControls 

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { createShortLink } from '@/services/mockData';
+import { linkApi } from '@/services/api';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/popover';
 import { CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useMutation } from '@tanstack/react-query';
 
 type LinkFormProps = {
   onLinkCreated: () => void;
@@ -26,7 +27,28 @@ const LinkForm = ({ onLinkCreated }: LinkFormProps) => {
   const [customAlias, setCustomAlias] = useState('');
   const [useExpiration, setUseExpiration] = useState(false);
   const [expirationDate, setExpirationDate] = useState<Date | undefined>(undefined);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const createLinkMutation = useMutation({
+    mutationFn: (data: { originalUrl: string; customAlias?: string; expirationDate?: string }) => {
+      return linkApi.createLink(data)
+        .then(response => response.data);
+    },
+    onSuccess: () => {
+      toast.success('Link created successfully!');
+      // Reset form
+      setOriginalUrl('');
+      setUseCustomAlias(false);
+      setCustomAlias('');
+      setUseExpiration(false);
+      setExpirationDate(undefined);
+      // Notify parent component to refresh the links list
+      onLinkCreated();
+    },
+    onError: (error: any) => {
+      console.error('Error creating link:', error);
+      toast.error(error.response?.data?.message || 'Failed to create link. Please try again.');
+    }
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,28 +63,13 @@ const LinkForm = ({ onLinkCreated }: LinkFormProps) => {
       return;
     }
 
-    setIsSubmitting(true);
+    const linkData = {
+      originalUrl,
+      ...(useCustomAlias && { customAlias }),
+      ...(useExpiration && expirationDate && { expirationDate: format(expirationDate, 'yyyy-MM-dd') })
+    };
 
-    try {
-      // In a real app, this would be an API call
-      createShortLink(
-        originalUrl,
-        useCustomAlias ? customAlias : undefined,
-        useExpiration && expirationDate ? format(expirationDate, 'yyyy-MM-dd') : undefined
-      );
-
-      toast.success('Link created successfully!');
-      setOriginalUrl('');
-      setUseCustomAlias(false);
-      setCustomAlias('');
-      setUseExpiration(false);
-      setExpirationDate(undefined);
-      onLinkCreated();
-    } catch (error) {
-      toast.error('Failed to create link. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
+    createLinkMutation.mutate(linkData);
   };
 
   return (
@@ -145,9 +152,9 @@ const LinkForm = ({ onLinkCreated }: LinkFormProps) => {
         <Button 
           type="submit" 
           className="w-full bg-gradient-to-r from-brand-blue-light to-brand-purple hover:from-brand-purple hover:to-brand-blue-light transition-all duration-300" 
-          disabled={isSubmitting}
+          disabled={createLinkMutation.isPending}
         >
-          {isSubmitting ? 'Creating...' : 'Create Short Link'}
+          {createLinkMutation.isPending ? 'Creating...' : 'Create Short Link'}
         </Button>
       </form>
     </div>
