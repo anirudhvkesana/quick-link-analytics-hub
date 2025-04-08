@@ -14,6 +14,7 @@ type AuthContextType = {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
+  loading: boolean; // Added this property to fix the error
   isLoading: boolean;
 };
 
@@ -22,8 +23,22 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [loading, setLoading] = useState<boolean>(true); // Added loading state to check if auth is initialized
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const isAuthenticated = !!user && !!token;
+
+  // Check if user data exists in localStorage on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      const storedUser = localStorage.getItem('user');
+      if (token && storedUser) {
+        setUser(JSON.parse(storedUser));
+      }
+      setLoading(false);
+    };
+    
+    checkAuth();
+  }, [token]);
 
   // Mock authentication for demo purposes
   const login = async (email: string, password: string) => {
@@ -67,15 +82,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     toast.success('Logged out successfully');
   };
 
-  useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (token && storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-  }, [token]);
-
   return (
-    <AuthContext.Provider value={{ user, token, isAuthenticated, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, token, isAuthenticated, login, logout, loading, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
